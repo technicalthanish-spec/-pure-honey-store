@@ -155,7 +155,7 @@ revoke all on function public.admin_save_record(uuid,text,jsonb) from public,ano
 revoke all on function public.admin_backup_v7() from public,anon;
 grant execute on function public.admin_tools_version(),public.admin_save_record(uuid,text,jsonb),public.admin_backup_v7() to authenticated;
 create or replace function public.admin_dashboard_data()
-returns jsonb language plpgsql security definer set search_path=public as $
+returns jsonb language plpgsql security definer set search_path=public as $$
 declare result jsonb;
 begin
   if not public.is_admin() then raise exception 'Admin access required.'; end if;
@@ -190,7 +190,7 @@ begin
     'recent_orders',coalesce((select jsonb_agg(to_jsonb(o) order by o.created_at desc) from (select id,order_number,customer_name,status,grand_total,created_at from public.orders order by created_at desc limit 8) o),'[]'::jsonb)
   ) into result from sales,costs,money,gifts,inventory,expenses;
   return result;
-end; $;
+end; $$;
 revoke all on function public.admin_dashboard_data() from public,anon;
 grant execute on function public.admin_dashboard_data() to authenticated;
 
