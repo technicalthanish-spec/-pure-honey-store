@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase.js'
 const links = [
   ['Dashboard', '/admin'],
   ['Orders', '/admin/orders'],
+  ['Sales Report / Hisab', '/admin/sales-report'],
   ['Coupons', '/admin/coupons'],
   ['Products / Stock', '/admin/products'],
 ]

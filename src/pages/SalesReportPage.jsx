@@ -1,0 +1,111 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase.js'
+import { currency } from '../lib/format.js'
+import { exportCsv } from '../lib/business.js'
+import { indiaDate, salesRows, salesTotals, weightText } from '../lib/salesReport.js'
+import Loader from '../components/Loader.jsx'
+
+async function readAll(table, columns) {
+  const rows = []
+  // Page past the API's default row limit so all-time reports remain complete.
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await supabase.from(table).select(columns).order('id').range(offset, offset + 499)
+    if (error) throw error
+    rows.push(...(data || []))
+    if (!data || data.length < 500) return rows
+  }
+}
+export default function SalesReportPage() {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [exporting, setExporting] = useState(false)
+  const [filters, setFilters] = useState({ search: '', from: '', to: '', status: 'Active' })
+  const [page, setPage] = useState(0)
+  const load = useCallback(async () => {
+    setLoading(true); setError('')
+    try {
+      const [orders, payments] = await Promise.all([
+        readAll('orders', 'id,order_number,customer_name,mobile,status,created_at,subtotal,discount_amount,coupon_code,delivery_charge,grand_total,order_items(product_name,size_label,quantity),invoices(id,invoice_number)'),
+        readAll('payments', 'id,order_id,kind,amount'),
+      ])
+      orders.sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id))
+      setData({ orders, payments, loadedAt: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) })
+      setPage(0)
+    } catch (e) { setError('Could not load the complete report. ' + e.message); setData(null) }
+    finally { setLoading(false) }
+  }, [])
+  useEffect(() => { load() }, [load])
+  const invalidDates = Boolean(filters.from && filters.to && filters.from > filters.to)
+  const rows = useMemo(() => data && !invalidDates ? salesRows(data.orders, data.payments, filters) : [], [data, filters, invalidDates])
+  const total = useMemo(() => salesTotals(rows), [rows])
+  const update = (key, value) => { setFilters(previous => ({ ...previous, [key]: value })); setPage(0) }
+  const description = [
+    filters.status === 'Delivered' ? 'Delivered orders only' : 'All non-cancelled orders (includes unfulfilled orders)',
+    'Order dates (IST): ' + (filters.from || 'Beginning') + ' to ' + (filters.to || 'Today'),
+    filters.search.trim() ? 'Search: ' + filters.search.trim() : '',
+    'Loaded: ' + (data?.loadedAt || '') + ' IST',
+  ].filter(Boolean).join(' | ')
+  const download = async () => {
+    setExporting(true); setError('')
+    try { const { downloadSalesReport } = await import('../lib/salesReportPdf.js'); downloadSalesReport(rows, total, description) }
+    catch (e) { setError('PDF could not be created. ' + e.message) }
+    finally { setExporting(false) }
+  }
+  const csv = () => {
+    const records = rows.map(row => ({
+      date_ist: indiaDate(row.created_at), order: row.order_number, customer: row.customer_name, status: row.status,
+      honey: row.itemsText, jars: row.jars, weight: weightText(row), amount: row.subtotal, discount: row.discount_amount || 0,
+      coupon: row.coupon_code || '', delivery: row.delivery_charge, total: row.grand_total,
+      received: row.received, refunded: row.refunded, net_received: row.net, pending: row.pending,
+    }))
+    records.push({ date_ist: '', order: 'TOTAL', customer: total.orders + ' orders', status: '', honey: '', jars: total.jars,
+      weight: weightText(total), amount: total.subtotal, discount: total.discount_amount, coupon: '', delivery: total.delivery_charge,
+      total: total.grand_total, received: total.received, refunded: total.refunded, net_received: total.net, pending: total.pending })
+    exportCsv('honey-sales-report', records)
+  }
+  return <div className="admin-page sales-report">
+    <div className="page-header"><div><div className="eyebrow">HONEY BUSINESS</div><h1>Sales report / Hisab</h1><p>Customer-wise honey quantities, discounts and totals.</p></div>
+      <button className="secondary-btn" disabled={loading} onClick={load}>{loading ? 'Loading…' : 'Refresh'}</button></div>
+    {error && <div className="alert error" role="alert">{error}</div>}
+    <section className="admin-card">
+      <div className="sales-filters">
+        <label className="field"><span>Customer / order / mobile</span><input value={filters.search} onChange={e => update('search', e.target.value)} placeholder="Search records" /></label>
+        <label className="field"><span>From · order date</span><input type="date" value={filters.from} onChange={e => update('from', e.target.value)} /></label>
+        <label className="field"><span>To · order date</span><input type="date" value={filters.to} onChange={e => update('to', e.target.value)} /></label>
+        <label className="field"><span>Orders included</span><select value={filters.status} onChange={e => update('status', e.target.value)}><option value="Active">All non-cancelled</option><option value="Delivered">Delivered only</option></select></label>
+      </div>
+      <p className="muted-text">Cancelled orders and giveaways are excluded. Use Delivered only for completed sales. Payment balances use all recorded payments/refunds for these orders.</p>
+      {invalidDates && <p role="alert" className="alert error">From date must be on or before To date.</p>}
+    </section>
+    {loading ? <Loader label="Loading complete sales history…" /> : data && !invalidDates && <>
+      <div className="business-metrics">
+        {[['Honey quantity', weightText(total)], ['Jars / orders', total.jars + ' / ' + total.orders], ['Amount before discount', currency(total.subtotal)],
+          ['Discount given', currency(total.discount_amount)], ['Honey value after discount', currency(total.netSales)], ['Delivery charges', currency(total.delivery_charge)],
+          ['Final total', currency(total.grand_total)], ['Net payment received', currency(total.net)], ['Payment pending', currency(total.pending)]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
+      </div>
+      <section className="admin-card">
+        <div className="card-title-row"><div><h2>Customer-wise statement</h2><p>{description}</p></div>
+          <div className="report-actions"><button className="primary-btn" disabled={!rows.length || exporting} onClick={download}>{exporting ? 'Creating PDF…' : 'Download PDF / Print'}</button><button className="secondary-btn" disabled={!rows.length} onClick={csv}>Download CSV</button></div></div>
+        <p className="muted-text">Total = amount − discount + delivery. Exports include every filtered row. Open the PDF to print.</p>
+        {total.unknownWeight && <p className="alert warning">Some older item sizes are unrecognised; their weight is marked unknown rather than counted as zero.</p>}
+        <div className="table-wrap"><table className="sales-table">
+          <thead><tr><th>Date / Order</th><th>Customer</th><th>Honey / Quantity</th><th>Weight</th><th>Amount</th><th>Discount</th><th>Delivery</th><th>Total</th><th>Net received</th><th>Pending</th><th>Invoice</th></tr></thead>
+          <tbody>{rows.slice(page * 50, (page + 1) * 50).map(row => {
+            const invoice = Array.isArray(row.invoices) ? row.invoices[0] : row.invoices
+            return <tr key={row.id}>
+              <td>{indiaDate(row.created_at)}<br/><Link to={'/admin/orders/' + row.id}>{row.order_number}</Link><small>{row.status}</small></td>
+              <td>{row.customer_name}</td><td>{row.itemsText || 'No item details'}<small>{row.jars} jars</small></td><td>{weightText(row)}</td>
+              <td>{currency(row.subtotal)}</td><td>{currency(row.discount_amount || 0)}{row.coupon_code && <small>{row.coupon_code}</small>}</td>
+              <td>{currency(row.delivery_charge)}</td><td><strong>{currency(row.grand_total)}</strong></td><td>{currency(row.net)}</td><td>{currency(row.pending)}</td>
+              <td><Link to={invoice ? '/admin/invoices/' + invoice.id : '/admin/orders/' + row.id}>{invoice ? invoice.invoice_number : 'Open order'}</Link></td>
+            </tr>
+          })}{!rows.length && <tr><td colSpan="11" className="empty-cell">No matching sales records.</td></tr>}</tbody>
+          <tfoot><tr><th colSpan="2">TOTAL · {total.orders} orders</th><th>{total.jars} jars</th><th>{weightText(total)}</th><th>{currency(total.subtotal)}</th><th>{currency(total.discount_amount)}</th><th>{currency(total.delivery_charge)}</th><th>{currency(total.grand_total)}</th><th>{currency(total.net)}</th><th>{currency(total.pending)}</th><th /></tr></tfoot>
+        </table></div>
+        {rows.length > 50 && <div className="report-actions"><button className="secondary-btn" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page + 1} of {Math.ceil(rows.length / 50)}</span><button className="secondary-btn" disabled={(page + 1) * 50 >= rows.length} onClick={() => setPage(page + 1)}>Next</button></div>}
+      </section>
+    </>}
+  </div>
+}
