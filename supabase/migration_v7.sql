@@ -44,7 +44,7 @@ create or replace function public.admin_save_record(p_request_id uuid,p_operatio
 returns jsonb language plpgsql security definer set search_path=public as $$
 declare
  prior public.admin_requests%rowtype; product public.products%rowtype; item record;
- result jsonb; order_id uuid; invoice_id uuid; order_no text; invoice_no text; entry_id uuid;
+ v_result jsonb; order_id uuid; invoice_id uuid; order_no text; invoice_no text; entry_id uuid;
  subtotal numeric:=0; discount numeric:=0; delivery numeric:=0; total numeric:=0; paid numeric:=0;
  discount_value numeric; discount_kind text; qty integer; rate numeric; allocated numeric:=0; line_discount numeric;
  item_count integer; seen integer:=0; payment_method text; customer_name text; mobile text; address text;
@@ -107,13 +107,13 @@ begin
    insert into public.payments(request_id,order_id,kind,amount,method,paid_at,note,created_by)
    values(p_request_id,order_id,'payment',paid,payment_method,now(),'Payment recorded with admin sale',auth.uid());
   end if;
-  result:=jsonb_build_object('id',order_id,'invoice_id',invoice_id,'order_number',order_no);
+  v_result:=jsonb_build_object('id',order_id,'invoice_id',invoice_id,'order_number',order_no);
  elsif p_operation='expense' then
   amount:=(p_data->>'amount')::numeric; entry_date:=(p_data->>'date')::date;
   if amount is null or amount<=0 or amount>10000000 or amount<>round(amount,2) or entry_date is null or entry_date>(now() at time zone 'Asia/Kolkata')::date or length(trim(note))<2 or coalesce(p_data->>'category','') not in ('Packaging','Courier','Travel','Other') then raise exception 'Enter a valid expense, date and note.'; end if;
   insert into public.business_expenses(request_id,category,amount,spent_on,note,created_by)
   values(p_request_id,p_data->>'category',amount,entry_date,note,auth.uid()) returning id into entry_id;
-  result:=jsonb_build_object('id',entry_id);
+  v_result:=jsonb_build_object('id',entry_id);
  else
   qty:=(p_data->>'quantity')::integer; rate:=(p_data->>'unit_cost')::numeric;
   entry_date:=(p_data->>'date')::date; supplier:=trim(p_data->>'supplier');
@@ -125,12 +125,12 @@ begin
   insert into public.stock_purchases(request_id,product_id,product_name,size_label,quantity,unit_cost,total_cost,supplier,purchased_on,note,created_by)
   values(p_request_id,product.id,product.name,product.size_label,qty,rate,qty*rate,supplier,entry_date,note,auth.uid()) returning id into entry_id;
   update public.products set available_quantity=stock_qty+qty,cost_price=average_cost where id=product.id;
-  result:=jsonb_build_object('id',entry_id,'available_quantity',stock_qty+qty,'cost_price',average_cost);
+  v_result:=jsonb_build_object('id',entry_id,'available_quantity',stock_qty+qty,'cost_price',average_cost);
  end if;
  insert into public.activity_log(actor_id,entity,entity_id,action,details)
- values(auth.uid(),'admin_'||p_operation,coalesce(order_id,entry_id),'INSERT',result);
- update public.admin_requests set result=admin_save_record.result where id=p_request_id;
- return result;
+ values(auth.uid(),'admin_'||p_operation,coalesce(order_id,entry_id),'INSERT',v_result);
+ update public.admin_requests set result=v_result where id=p_request_id;
+ return v_result;
 end; $$;
 
 create or replace function public.admin_backup_v7() returns jsonb
