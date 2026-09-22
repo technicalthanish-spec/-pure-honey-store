@@ -103,7 +103,7 @@ export default function OrderDetailPage() {
     <div className="admin-page">
       <div className="page-header">
         <div><Link className="back-link" to="/admin/orders">← Orders</Link><h1>{order.order_number}</h1><p>Placed {dateTime(order.created_at)}</p></div>
-        <StatusBadge status={order.status} />
+        <div className="report-actions"><Link className="secondary-btn" to={'/admin/new-sale?repeat='+order.id}>Repeat order</Link><StatusBadge status={order.status} /></div>
       </div>
       {error && <div className="alert error">{error}</div>}
       {message && <div className="alert success">{message}</div>}
@@ -142,7 +142,7 @@ export default function OrderDetailPage() {
         </div>
         <div className="totals-box">
           <div><span>Subtotal</span><strong>{currency(order.subtotal)}</strong></div>
-          {Number(order.discount_amount)>0 && <div><span>Discount ({order.coupon_code})</span><strong>−{currency(order.discount_amount)}</strong></div>}
+          {Number(order.discount_amount)>0 && <div><span>Discount{order.coupon_code ? " ("+order.coupon_code+")" : ""}</span><strong>−{currency(order.discount_amount)}</strong></div>}
           <div><span>Delivery Charge</span><strong>{currency(order.delivery_charge)}</strong></div>
           <div className="grand"><span>Grand Total</span><strong>{currency(order.grand_total)}</strong></div>
         </div>

@@ -3,10 +3,15 @@ import { supabase } from '../lib/supabase.js'
 
 const links = [
   ['Dashboard', '/admin'],
+  ['New Sale', '/admin/new-sale'],
+  ['Customers / Khata', '/admin/customers'],
   ['Orders', '/admin/orders'],
   ['Sales Report / Hisab', '/admin/sales-report'],
   ['Coupons', '/admin/coupons'],
   ['Products / Stock', '/admin/products'],
+  ['Stock Purchases', '/admin/purchases'],
+  ['Expenses', '/admin/expenses'],
+  ['Backup', '/admin/backup'],
 ]
 
 export default function AdminLayout() {
@@ -24,7 +29,7 @@ export default function AdminLayout() {
           <div className="brand-mark">H</div>
           <div>
             <strong>Honey Admin</strong>
-            <span>Order management</span>
+            <span>Personal business manager</span>
           </div>
         </div>
 

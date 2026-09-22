@@ -58,7 +58,7 @@ export default function InvoiceSheet({ invoice, order, settings }) {
           </div>
           <div className="invoice-summary">
             <div><span>Subtotal</span><strong>{currency(invoice.subtotal)}</strong></div>
-            {Number(invoice.discount_amount)>0 && <div><span>Discount ({invoice.coupon_code})</span><strong>−{currency(invoice.discount_amount)}</strong></div>}
+            {Number(invoice.discount_amount)>0 && <div><span>Discount{invoice.coupon_code ? " ("+invoice.coupon_code+")" : ""}</span><strong>−{currency(invoice.discount_amount)}</strong></div>}
             <div><span>Delivery Charge</span><strong>{currency(invoice.delivery_charge)}</strong></div>
             <div className="invoice-grand"><span>Grand Total</span><strong>{currency(invoice.grand_total)}</strong></div>
           </div>

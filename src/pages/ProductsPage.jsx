@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { currency } from '../lib/format.js'
 import Loader from '../components/Loader.jsx'
@@ -45,7 +46,7 @@ export default function ProductsPage() {
 
   return (
     <div className="admin-page">
-      <div className="page-header"><div><h1>Products & Stock</h1><p>Set selling price, your cost and available stock for each honey size.</p></div></div>
+      <div className="page-header"><div><h1>Products & Stock</h1><Link className="secondary-btn" to="/admin/purchases">Record stock purchase</Link><p>Set selling prices and opening stock. Use Stock Purchases for new deliveries to preserve the purchase history.</p></div></div>
       {error && <div className="alert error">{error}</div>}
       {message && <div className="alert success">{message}</div>}
       <div className="product-admin-grid">

@@ -124,7 +124,7 @@ export function buildInvoicePdf({ invoice, order, settings }) {
   doc.text('Subtotal', labelX, finalY + 12)
   doc.text(moneyText(invoice.subtotal), valueX, finalY + 12, { align: 'right' })
   if (Number(invoice.discount_amount)>0) {
-    doc.text('Discount (' + invoice.coupon_code + ')', left, finalY + 19)
+    doc.text('Discount' + (invoice.coupon_code ? ' (' + invoice.coupon_code + ')' : ''), left, finalY + 19)
     doc.text('-' + moneyText(invoice.discount_amount), left, finalY + 26)
   }
   doc.text('Delivery Charge', labelX, finalY + 19)

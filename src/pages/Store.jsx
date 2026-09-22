@@ -6,14 +6,15 @@ import { currency, shortDate } from '../lib/format.js'
 const couponMessage = message => /coupon/i.test(message || '') ? ('Invalid coupon. ' + (/not in your cart|different honey size/i.test(message) ? 'This code does not apply to the sizes in your cart.' : /usage limit|already used/i.test(message) ? 'This code has reached its usage limit.' : /expired|inactive/i.test(message) ? 'This code is unavailable or expired.' : 'Please check the code and try again.')) : message;
 const Auth=createContext(null)
 export function AuthProvider({children}){
- const [session,setSession]=useState(undefined),[admin,setAdmin]=useState(false)
+ const [session,setSession]=useState(undefined),[admin,setAdmin]=useState(null)
  useEffect(()=>{supabase.auth.getSession().then(({data})=>setSession(data.session));const {data}=supabase.auth.onAuthStateChange((event,s)=>setSession(s));return ()=>data.subscription.unsubscribe()},[])
- useEffect(()=>{let live=true;setAdmin(false);if(session?.user) supabase.from('profiles').select('role').eq('id',session.user.id).single().then(({data})=>{if(live)setAdmin(data?.role==='admin')});return()=>{live=false}},[session?.user.id])
+ useEffect(()=>{let live=true;setAdmin(null);if(session?.user) supabase.from('profiles').select('role').eq('id',session.user.id).single().then(({data})=>{if(live)setAdmin(data?.role==='admin')});return()=>{live=false}},[session?.user.id])
  return <Auth.Provider value={{session,admin}}>{children}</Auth.Provider>
 }
 export function Login(){
- const {session}=useContext(Auth),[signup,setSignup]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState('')
- if(session) return <Navigate to="/shop" replace/>
+ const {session,admin}=useContext(Auth),[signup,setSignup]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[message,setMessage]=useState('')
+ if(session && admin===null) return <p className="loading">Opening your account…</p>
+ if(session) return <Navigate to={admin?"/admin":"/shop"} replace/>
  const submit=async e=>{e.preventDefault();setBusy(true);setError('');setMessage('');const f=new FormData(e.currentTarget);try{const credentials={email:f.get('email').trim(),password:f.get('password')};const {data,error}=signup?await supabase.auth.signUp({...credentials,options:{emailRedirectTo:window.location.origin+'/shop'}}):await supabase.auth.signInWithPassword(credentials);if(error)throw error;if(signup&&!data.session)setMessage('Check your email to confirm your account, then log in.')}catch(e){setError(e.message)}finally{setBusy(false)}}
  if(!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) return <main className="auth-wrap"><div className="auth-card"><h1>Almost ready.</h1><p>Add your Supabase connection in the project’s .env file to enable login and ordering. Setup instructions are in README.md.</p></div></main>
  return <main className="auth-wrap"><div className="auth-card"><div className="brand-mark">H</div><p className="eyebrow">PURE HONEY</p><h1>{signup?'A little sweetness awaits.':'Welcome back.'}</h1><p>Log in to shop and keep track of your orders.</p><form onSubmit={submit}><label className="field">Email<input autoComplete="email" name="email" type="email" required/></label><label className="field">Password<input autoComplete={signup?'new-password':'current-password'} name="password" type="password" minLength={8} required/></label>{error&&<p role="alert" className="alert error">{error}</p>}{message&&<p role="status" className="alert success">{message}</p>}<button className="primary-btn" disabled={busy}>{busy?'Please wait…':signup?'Create account':'Log in'}</button></form><button className="text-btn" onClick={()=>{setSignup(!signup);setError('');setMessage('')}}>{signup?'Already registered? Log in':'New here? Create an account'}</button></div></main>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import InvoiceSheet from '../components/InvoiceSheet.jsx'
-import { downloadInvoicePdf, previewInvoicePdf } from '../lib/invoicePdf.js'
+import { buildInvoicePdf, downloadInvoicePdf, previewInvoicePdf } from '../lib/invoicePdf.js'
 import Loader from '../components/Loader.jsx'
 
 export default function InvoiceDetailPage() {
@@ -29,6 +29,19 @@ export default function InvoiceDetailPage() {
   if (!data) return <div className="admin-page"><div className="alert error">{error || 'Invoice not found.'}</div></div>
 
   const { invoice, order, settings } = data
+  const sharePdf = async () => {
+    try {
+      const file = new File([buildInvoicePdf(data).output('blob')], invoice.invoice_number + '.pdf', { type: 'application/pdf' })
+      if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: invoice.invoice_number, text: 'Honey invoice for ' + order.customer_name })
+      else downloadInvoicePdf(data)
+    } catch (e) { if (e.name !== 'AbortError') setError('Could not share PDF. Use Download PDF and attach it in WhatsApp.') }
+  }
+  const whatsapp = 'https://wa.me/91' + String(order.mobile).replace(/[^0-9]/g, '') + '?text=' + encodeURIComponent(
+    'Hello ' + order.customer_name + ', your honey bill ' + invoice.invoice_number + ': ' +
+    (order.order_items || []).map(i => i.size_label + ' x ' + i.quantity).join(', ') +
+    '. Amount: Rs. ' + Number(invoice.subtotal).toFixed(2) + ', discount: Rs. ' + Number(invoice.discount_amount || 0).toFixed(2) +
+    ', delivery: Rs. ' + Number(invoice.delivery_charge).toFixed(2) + '. Total: Rs. ' + Number(invoice.grand_total).toFixed(2) + '. Thank you.'
+  )
 
   return (
     <div className="admin-page invoice-page">
@@ -37,7 +50,7 @@ export default function InvoiceDetailPage() {
         <div className="button-group">
           <button className="secondary-btn" onClick={() => previewInvoicePdf(data)}>Preview PDF</button>
           <button className="secondary-btn" onClick={() => downloadInvoicePdf(data)}>Download PDF</button>
-          <button className="primary-btn" onClick={() => window.print()}>Print Invoice</button>
+          <button className="secondary-btn" onClick={sharePdf}>Share invoice PDF</button><a className="secondary-btn" target="_blank" rel="noreferrer" href={whatsapp}>WhatsApp bill message</a><button className="primary-btn" onClick={() => window.print()}>Print Invoice</button>
         </div>
       </div>
       {error && <div className="alert error no-print">{error}</div>}
