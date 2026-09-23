@@ -1,76 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabase.js'
+import { Link, useSearchParams } from 'react-router-dom'
+import { readAll } from '../lib/adminTools.js'
+import { balance } from '../lib/business.js'
 import { currency, shortDate } from '../lib/format.js'
-import Loader from '../components/Loader.jsx'
 import StatusBadge from '../components/StatusBadge.jsx'
-
-const statuses = ['All', 'New', 'Confirmed', 'Packed', 'Shipped', 'Delivered', 'Cancelled']
-
-export default function OrdersPage() {
-  const [orders, setOrders] = useState([])
-  const [filter, setFilter] = useState('All')
-  const [search, setSearch] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
-  const load = useCallback(async () => {
-    const { data, error: queryError } = await supabase
-      .from('orders')
-      .select('id, order_number, customer_name, mobile, status, subtotal, delivery_charge, grand_total, created_at, order_items(size_label, quantity, product_name)')
-      .order('created_at', { ascending: false })
-    if (queryError) setError(queryError.message)
-    else setOrders(data || [])
-    setLoading(false)
-  }, [])
-
-  useEffect(() => {
-    load()
-    const channel = supabase.channel('orders-list').on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, load).subscribe()
-    return () => { supabase.removeChannel(channel) }
-  }, [load])
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim()
-    return orders.filter((order) => {
-      const statusMatch = filter === 'All' || order.status === filter
-      const searchMatch = !q || order.order_number.toLowerCase().includes(q) || order.customer_name.toLowerCase().includes(q) || order.mobile.includes(q)
-      return statusMatch && searchMatch
-    })
-  }, [orders, filter, search])
-
-  if (loading) return <Loader label="Loading orders..." />
-
-  return (
-    <div className="admin-page">
-      <div className="page-header"><div><h1>Orders</h1><p>Manage every customer order from one place.</p></div></div>
-      {error && <div className="alert error">{error}</div>}
-      <section className="admin-card">
-        <div className="toolbar">
-          <input className="search-input" placeholder="Search order, customer or phone" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <select value={filter} onChange={(e) => setFilter(e.target.value)}>{statuses.map((status) => <option key={status}>{status}</option>)}</select>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead><tr><th>Order ID</th><th>Customer</th><th>Phone</th><th>Order Date</th><th>Products / Size</th><th>Quantity</th><th>Total Amount</th><th>Status</th></tr></thead>
-            <tbody>
-              {filtered.map((order) => {
-                const items = order.order_items || []
-                return (
-                  <tr key={order.id}>
-                    <td><Link to={`/admin/orders/${order.id}`}>{order.order_number}</Link></td>
-                    <td>{order.customer_name}</td><td>{order.mobile}</td><td>{shortDate(order.created_at)}</td>
-                    <td>{items.map((i) => `${i.product_name} ${i.size_label}`).join(', ') || '-'}</td>
-                    <td>{items.reduce((sum, i) => sum + Number(i.quantity), 0)}</td>
-                    <td>{currency(order.grand_total)}</td><td><StatusBadge status={order.status} /></td>
-                  </tr>
-                )
-              })}
-              {!filtered.length && <tr><td colSpan="8" className="empty-cell">No matching orders.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </div>
-  )
+const tabs=[['all','All orders'],['fulfil','To fulfil'],['pending','Payment pending'],['refund','Refund due']]
+export default function OrdersPage(){
+ const [query,setQuery]=useSearchParams(),[data,setData]=useState(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[search,setSearch]=useState(''),[status,setStatus]=useState('All'),[page,setPage]=useState(0)
+ const view=tabs.some(([key])=>key===query.get('view'))?query.get('view'):'all'
+ const load=useCallback(async()=>{setLoading(true);setError('');try{const [orders,payments]=await Promise.all([readAll('orders','id,order_number,customer_name,mobile,status,grand_total,created_at,order_items(size_label,quantity)'),readAll('payments','id,order_id,kind,amount')]);setPage(0);setData(orders.map(o=>({...o,...balance(o,payments)})).sort((a,b)=>b.created_at.localeCompare(a.created_at)))}catch(e){setError(e.message)}finally{setLoading(false)}},[])
+ useEffect(()=>{load()},[load]);useEffect(()=>{setPage(0)},[search,status,view])
+ const filtered=useMemo(()=>(data||[]).filter(o=>(status==='All'||o.status===status)&&(!search.trim()||[o.customer_name,o.order_number,o.mobile].some(v=>String(v||'').toLowerCase().includes(search.trim().toLowerCase())))&&(view==='all'||view==='pending'&&o.pending>0||view==='refund'&&o.refundDue>0||view==='fulfil'&&!['Delivered','Cancelled'].includes(o.status))),[data,status,search,view])
+ return <div className="admin-page"><div className="page-header"><div className="page-title"><div className="eyebrow">DAILY WORK</div><h1>Orders & payments</h1><p>Find an order, manage delivery and record payment.</p></div><button className="secondary-btn" onClick={load} disabled={loading}>{loading?'Refreshing…':'Refresh'}</button></div>{error&&<p role="alert" className="alert error">{error}</p>}
+ <div className="view-tabs" aria-label="Order views">{tabs.map(([key,label])=><button key={key} className={view===key?'active':''} aria-pressed={view===key} onClick={()=>setQuery(key==='all'?{}:{view:key})}>{label}</button>)}</div>
+ <section className="admin-card"><div className="toolbar"><input aria-label="Search orders" placeholder="Customer, order number or mobile" value={search} onChange={e=>setSearch(e.target.value)}/><select aria-label="Delivery status" value={status} onChange={e=>setStatus(e.target.value)}>{['All','New','Confirmed','Packed','Shipped','Delivered','Cancelled'].map(s=><option key={s}>{s}</option>)}</select></div><p className="muted-text">{filtered.length} matching orders</p>
+ {loading&&!data?<p>Loading orders…</p>:<div className="order-cards">{filtered.slice(page*24,(page+1)*24).map(o=><Link className="order-card" to={'/admin/orders/'+o.id} key={o.id}><div className="order-card-top"><span>{o.order_number}</span><StatusBadge status={o.status}/></div><h3>{o.customer_name}</h3><small>{o.mobile} · {shortDate(o.created_at)}</small><p>{(o.order_items||[]).map(i=>i.size_label+' × '+i.quantity).join(' · ')}</p><div className="order-card-bottom"><strong>{currency(o.grand_total)}</strong><span>{o.refundDue>0?'Refund '+currency(o.refundDue):o.pending>0?'Due '+currency(o.pending):o.status==='Cancelled'?'Cancelled':'Paid'} →</span></div></Link>)}</div>}
+ {!loading&&!filtered.length&&<div className="empty-state"><h3>No matching orders</h3><p>Try another view or clear the filters.</p><button className="secondary-btn" onClick={()=>{setSearch('');setStatus('All');setQuery({})}}>Clear filters</button></div>}
+ {filtered.length>24&&<div className="pagination"><button className="secondary-btn" disabled={!page} onClick={()=>setPage(page-1)}>Previous</button><span>{page+1} / {Math.ceil(filtered.length/24)}</span><button className="secondary-btn" disabled={(page+1)*24>=filtered.length} onClick={()=>setPage(page+1)}>Next</button></div>}</section></div>
 }

@@ -33,9 +33,10 @@ export default function ProductsPage() {
       available_quantity: Math.max(0, Number(product.available_quantity) || 0),
       active: Boolean(product.active),
     }
-    const { error: updateError } = await supabase.from('products').update(payload).eq('id', product.id)
+    const { data: updated, error: updateError } = await supabase.from('products').update(payload).eq('id', product.id).eq('updated_at', product.updated_at).select('id')
     setSaving('')
     if (updateError) setError(updateError.message)
+    else if (!updated?.length) { await load(); setError('Stock or prices changed while you were editing. Latest values loaded; review and save again.'); }
     else {
       setMessage(`${product.size_label} updated.`)
       load()
@@ -57,10 +58,11 @@ export default function ProductsPage() {
             <label className="field"><span>Your cost per jar (₹)</span><input type="number" min="0" step="0.01" value={product.cost_price ?? 0} onChange={(e) => patchLocal(product.id, 'cost_price', e.target.value)} /></label>
             <label className="field"><span>Available quantity</span><input type="number" min="0" step="1" value={product.available_quantity} onChange={(e) => patchLocal(product.id, 'available_quantity', e.target.value)} /></label>
             <label className="toggle-row"><input type="checkbox" checked={product.active} onChange={(e) => patchLocal(product.id, 'active', e.target.checked)} /><span>Active for ordering</span></label>
-            <div className="product-card-footer"><span>Margin: {currency(Number(product.price)-Number(product.cost_price||0))} / jar</span><button className="primary-btn small" onClick={() => save(product)} disabled={saving === product.id}>{saving === product.id ? 'Saving...' : 'Save'}</button></div>
+            <div className="product-card-footer"><span>Margin: {currency(Number(product.price)-Number(product.cost_price||0))} / jar</span><button className="primary-btn small" onClick={() => save(product)} disabled={Boolean(saving)}>{saving === product.id ? 'Saving...' : 'Save'}</button></div>
           </section>
         ))}
       </div>
     </div>
   )
 }
+

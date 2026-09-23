@@ -7,10 +7,11 @@ const localNow=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezone
 export default function PaymentPanel({order}) {
   const [rows,setRows]=useState([]),[error,setError]=useState(''),[busy,setBusy]=useState(false),[loaded,setLoaded]=useState(false),[message,setMessage]=useState('')
   const [kind,setKind]=useState('payment'),[amount,setAmount]=useState(''),[method,setMethod]=useState('UPI'),[date,setDate]=useState(localNow),[note,setNote]=useState('')
+  const [expanded,setExpanded]=useState(false)
   const attempt=useRef(null),lock=useRef(false)
   const load=async()=>{
     const {data,error}=await supabase.from('payments').select('*').eq('order_id',order.id).order('created_at',{ascending:false})
-    if(error){setError('Payment records unavailable. Apply migration_v4.sql first, then refresh.');setLoaded(false)}else{setRows(data||[]);setLoaded(true)}
+    if(error){setError('Could not load payments. Please refresh and try again.');setLoaded(false)}else{setError('');setRows(data||[]);setLoaded(true)}
   }
   useEffect(()=>{load()},[order.id])
   const b=balance(order,rows)
@@ -23,7 +24,7 @@ export default function PaymentPanel({order}) {
       if(!attempt.current || attempt.current.fingerprint!==fingerprint)attempt.current={fingerprint,id:crypto.randomUUID()}
       const {error}=await supabase.rpc('record_payment',{...payload,p_request_id:attempt.current.id})
       if(error)throw error
-      attempt.current=null;setAmount('');setNote('');setMessage('Recorded successfully. The ledger keeps this entry permanently.');await load()
+      attempt.current=null;setAmount('');setNote('');setExpanded(false);setMessage('Recorded successfully. The ledger keeps this entry permanently.');await load()
     }catch(e){setError(e.message+' If the connection failed, retry with the same details to avoid a duplicate entry.')}
     finally{lock.current=false;setBusy(false)}
   }
@@ -32,15 +33,17 @@ export default function PaymentPanel({order}) {
     {error&&<p role="alert" className="alert error">{error}</p>}{message&&<p role="status" className="alert success">{message}</p>}
     {loaded&&<>
       <div className="business-metrics compact">{[['Received',b.received],['Refunded',b.refunded],['Pending payment',b.pending],['Refund pending',b.refundDue]].map(([k,v])=><div key={k}><span>{k}</span><strong>{currency(v)}</strong></div>)}</div>
-      <form onSubmit={submit} className="form-grid ledger-form">
+      <button type="button" className="secondary-btn" aria-expanded={expanded} disabled={busy} onClick={()=>{setExpanded(!expanded);setDate(localNow())}}>{expanded?'Close entry form':'Record payment / refund'}</button>
+      {expanded&&<form onSubmit={submit} className="form-grid ledger-form">
         <label className="field"><span>Entry type</span><select value={kind} onChange={e=>setKind(e.target.value)} disabled={busy}><option value="payment">Payment received</option><option value="refund">Refund sent</option></select></label>
         <label className="field"><span>Amount (₹)</span><input required type="number" min="0.01" step="0.01" max={kind==='payment'?b.pending:b.net} value={amount} onChange={e=>setAmount(e.target.value)} disabled={busy}/></label>
         <label className="field"><span>Method</span><select value={method} onChange={e=>setMethod(e.target.value)} disabled={busy}>{['Cash','UPI','Bank'].map(x=><option key={x}>{x}</option>)}</select></label>
         <label className="field"><span>Received / refunded at</span><input required type="datetime-local" value={date} onChange={e=>setDate(e.target.value)} disabled={busy}/></label>
         <label className="field full"><span>Reference / note</span><input maxLength={500} value={note} onChange={e=>setNote(e.target.value)} placeholder="UPI reference or reason for refund" disabled={busy}/></label>
         <button className="primary-btn" disabled={busy || (kind==='payment'?b.pending<=0:b.net<=0)}>{busy?'Saving…':'Record '+(kind==='payment'?'payment':'refund')}</button>
-      </form>
+      </form>}
       <div className="business-list">{rows.map(p=><div className="business-row" key={p.id}><div><strong>{p.kind==='refund'?'Refund':'Payment'} · {p.method}</strong><small>{dateTime(p.paid_at)} · {p.note||'No reference'}</small></div><strong>{p.kind==='refund'?'−':''}{currency(p.amount)}</strong></div>)}{!rows.length&&<p className="muted-text">No money recorded yet. This order has not been marked paid.</p>}</div>
     </>}
   </section>
 }
+

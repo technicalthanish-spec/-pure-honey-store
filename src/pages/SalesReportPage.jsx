@@ -89,13 +89,10 @@ export default function SalesReportPage() {
       {invalidDates && <p role="alert" className="alert error">From date must be on or before To date.</p>}
     </section>
     {loading ? <Loader label="Loading complete sales history…" /> : data && !invalidDates && <>
-      <div className="business-metrics">
-        {[['Sales quantity', weightText(total)], ['Free honey', weightText(freeTotal) + ' · ' + freeTotal.jars + ' jars'], ['Sales + free quantity', weightText(combined)], ['Jars / orders', total.jars + ' / ' + total.orders], ['Amount before discount', currency(total.subtotal)],
-          ['Discount given', currency(total.discount_amount)], ['Honey value after discount', currency(total.netSales)], ['Delivery charges', currency(total.delivery_charge)],
-          ['Final total', currency(total.grand_total)], ['Net payment received', currency(total.net)], ['Payment pending', currency(total.pending)]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}
-      </div>
+      <div className="business-metrics">{[['Sales total',currency(total.grand_total)],['Payment pending',currency(total.pending)],['Free honey',weightText(freeTotal)+' · '+freeTotal.jars+' jars'],['Sales + free quantity',weightText(combined)]].map(([label,value])=><div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
+      <details className="admin-card report-detail"><summary>View sales and discount breakdown</summary><div className="business-metrics">{[['Sales quantity',weightText(total)],['Jars / orders',total.jars+' / '+total.orders],['Before discount',currency(total.subtotal)],['Discount given',currency(total.discount_amount)],['Delivery charges',currency(total.delivery_charge)],['Net received',currency(total.net)]].map(([label,value])=><div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div></details>
       <section className="admin-card">
-        <div className="card-title-row"><div><h2>Customer-wise statement</h2><p>{description}</p></div>
+        <div className="card-title-row"><div><h2>Customer-wise statement</h2><details className="report-detail"><summary>Report scope & updated time</summary><p>{description}</p></details></div>
           <div className="report-actions"><button className="primary-btn" disabled={(!rows.length && !freeRows.length) || exporting} onClick={download}>{exporting ? 'Creating PDF…' : 'Download PDF / Print'}</button><button className="secondary-btn" disabled={!rows.length && !freeRows.length} onClick={csv}>Download CSV</button></div></div>
         <p className="muted-text">Total = amount − discount + delivery. Exports include every filtered row. Open the PDF to print.</p>
         {total.unknownWeight && <p className="alert warning">Some older item sizes are unrecognised; their weight is marked unknown rather than counted as zero.</p>}
@@ -116,7 +113,7 @@ export default function SalesReportPage() {
         {rows.length > 50 && <div className="report-actions"><button className="secondary-btn" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page + 1} of {Math.ceil(rows.length / 50)}</span><button className="secondary-btn" disabled={(page + 1) * 50 >= rows.length} onClick={() => setPage(page + 1)}>Next</button></div>}
       </section>
       <section className="admin-card">
-        <div className="card-title-row"><div><h2>Free honey / Giveaways</h2><p>{freeTotal.jars} jars · {weightText(freeTotal)} · Customer charge ₹0</p></div><Link className="secondary-btn" to="/admin">Record free honey</Link></div>
+        <div className="card-title-row"><div><h2>Free honey / Giveaways</h2><p>{freeTotal.jars} jars · {weightText(freeTotal)} · Customer charge ₹0</p></div><Link className="secondary-btn" to="/admin/giveaways">Record free honey</Link></div>
         <p className="muted-text">Included in PDF and CSV. Dates and recipient search apply here; the order status filter does not hide giveaways.</p>
         {freeTotal.unknownWeight && <p className="alert warning">Some giveaway sizes are unrecognised; their weight is marked unknown.</p>}
         <div className="table-wrap"><table><thead><tr><th>Date</th><th>Given to</th><th>Honey / Size</th><th>Jars</th><th>Weight</th><th>Amount</th><th>Note</th></tr></thead>
@@ -128,3 +125,4 @@ export default function SalesReportPage() {
     </>}
   </div>
 }
+
