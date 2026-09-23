@@ -1,3 +1,4 @@
+import RecordEditor from './RecordEditor.jsx'
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase.js'
 import { currency, dateTime } from '../lib/format.js'
@@ -42,7 +43,7 @@ export default function PaymentPanel({order}) {
         <label className="field full"><span>Reference / note</span><input maxLength={500} value={note} onChange={e=>setNote(e.target.value)} placeholder="UPI reference or reason for refund" disabled={busy}/></label>
         <button className="primary-btn" disabled={busy || (kind==='payment'?b.pending<=0:b.net<=0)}>{busy?'Saving…':'Record '+(kind==='payment'?'payment':'refund')}</button>
       </form>}
-      <div className="business-list">{rows.map(p=><div className="business-row" key={p.id}><div><strong>{p.kind==='refund'?'Refund':'Payment'} · {p.method}</strong><small>{dateTime(p.paid_at)} · {p.note||'No reference'}</small></div><strong>{p.kind==='refund'?'−':''}{currency(p.amount)}</strong></div>)}{!rows.length&&<p className="muted-text">No money recorded yet. This order has not been marked paid.</p>}</div>
+      <div className="business-list">{rows.map(p=><div className="business-row" key={p.id}><div><strong>{p.kind==='refund'?'Refund':'Payment'} · {p.method}</strong><small>{dateTime(p.paid_at)} · {p.note||'No reference'}</small></div><strong>{p.kind==='refund'?'−':''}{currency(p.amount)}</strong><RecordEditor kind="payment" record={p} onSaved={load}/></div>)}{!rows.length&&<p className="muted-text">No money recorded yet. This order has not been marked paid.</p>}</div>
     </>}
   </section>
 }

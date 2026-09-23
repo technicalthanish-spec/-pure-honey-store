@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { supabase } from './supabase.js'
 // Keep an uncertain request across refreshes; retry exactly the same operation.
-export function useAdminSave(operation){
+export function useAdminSave(operation,rpcName='admin_save_record'){
  const key='honey-pending-admin-'+operation
  const [pending,setPending]=useState(()=>{try{return JSON.parse(sessionStorage.getItem(key)||'null')}catch{return null}})
  const [busy,setBusy]=useState(false),[error,setError]=useState('')
@@ -12,7 +12,7 @@ export function useAdminSave(operation){
   try{
    const attempt=pending||{id:crypto.randomUUID(),payload}
    sessionStorage.setItem(key,JSON.stringify(attempt));setPending(attempt)
-   const {data,error}=await supabase.rpc('admin_save_record',{p_request_id:attempt.id,p_operation:operation,p_data:attempt.payload})
+   const {data,error}=await supabase.rpc(rpcName,rpcName==='admin_correct_record'?{...attempt.payload,p_request_id:attempt.id}:{p_request_id:attempt.id,p_operation:operation,p_data:attempt.payload})
    if(error){
     // A server SQL error rolls the entire transaction back; a network error is uncertain.
     if(error.code&&/^[0-9A-Z]{5}$/.test(error.code)){sessionStorage.removeItem(key);setPending(null)}
@@ -24,3 +24,4 @@ export function useAdminSave(operation){
  }
  return {save,pending,busy,error}
 }
+

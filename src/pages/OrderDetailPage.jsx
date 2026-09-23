@@ -1,3 +1,4 @@
+import RecordEditor from '../components/RecordEditor.jsx'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
@@ -103,7 +104,7 @@ export default function OrderDetailPage() {
     <div className="admin-page">
       <div className="page-header">
         <div><Link className="back-link" to="/admin/orders">← Orders</Link><h1>{order.order_number}</h1><p>Placed {dateTime(order.created_at)}</p></div>
-        <div className="report-actions"><Link className="secondary-btn" to={'/admin/new-sale?repeat='+order.id}>Repeat order</Link><StatusBadge status={order.status} /></div>
+        <div className="report-actions"><RecordEditor kind="order" record={order} onSaved={load}/><Link className="secondary-btn" to={'/admin/new-sale?repeat='+order.id}>Repeat order</Link><StatusBadge status={order.status} /></div>
       </div>
       {error && <div className="alert error">{error}</div>}
       {message && <div className="alert success">{message}</div>}
@@ -156,3 +157,4 @@ export default function OrderDetailPage() {
     </div>
   )
 }
+

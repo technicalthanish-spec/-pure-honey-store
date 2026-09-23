@@ -34,6 +34,7 @@ jobs:
       - run: npm run build
       - run: node tests/sales-report.mjs
       - run: node tests/admin-tools.mjs
+      - run: node tests/profit.mjs
       - name: Test database migrations and transactions
         run: |
           psql -v ON_ERROR_STOP=1 -f tests/auth-stub.sql
@@ -42,3 +43,5 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migration_v7.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migration_v7.sql
           psql -v ON_ERROR_STOP=1 -f tests/admin-tools.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260923171311_editable_records_profit.sql
+          psql -v ON_ERROR_STOP=1 -f tests/corrections.sql
