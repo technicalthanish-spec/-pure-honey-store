@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { salesRows, salesTotals, itemGrams, indiaDate } from '../src/lib/salesReport.js'
+import { salesRows, salesTotals, itemGrams, indiaDate, giveawayRows, giveawayTotals } from '../src/lib/salesReport.js'
 const base = {"id":"a","created_at":"2026-09-21T20:00:00Z","customer_name":"Rahul","order_number":"HON-1","status":"Delivered","subtotal":800,"discount_amount":50,"delivery_charge":20,"grand_total":770,"order_items":[{"product_name":"Honey","size_label":"500 g","quantity":2}]}
 const orders = [{"id":"a","created_at":"2026-09-21T20:00:00Z","customer_name":"Rahul","order_number":"HON-1","status":"Delivered","subtotal":800,"discount_amount":50,"delivery_charge":20,"grand_total":770,"order_items":[{"product_name":"Honey","size_label":"500 g","quantity":2}]},{"id":"b","created_at":"2026-09-21T20:00:00Z","customer_name":"Aman","order_number":"HON-1","status":"New","subtotal":400,"discount_amount":0,"delivery_charge":0,"grand_total":400,"order_items":[{"size_label":"250 gm","quantity":2}]},{"id":"c","created_at":"2026-09-21T20:00:00Z","customer_name":"Rahul","order_number":"HON-1","status":"Cancelled","subtotal":800,"discount_amount":50,"delivery_charge":20,"grand_total":770,"order_items":[{"product_name":"Honey","size_label":"500 g","quantity":2}]}]
 const payments = [{"order_id":"a","kind":"payment","amount":600},{"order_id":"a","kind":"refund","amount":50}]
@@ -19,3 +19,18 @@ assert.equal(itemGrams({ size_label: '1 kg' }), 1000)
 assert.equal(itemGrams({ size_label: 'unknown' }), null)
 assert.equal(salesTotals([]).grand_total, 0)
 console.log('Sales report calculations and filters passed.')
+
+const gifts=[
+ {id:'g1',recipient:'Ravi',product_name:'Honey',size_label:'500 g',quantity:2,created_at:'2026-09-21T20:00:00Z',note:'Sample'},
+ {id:'g2',recipient:'Aman',product_name:'Honey',size_label:'250 g',quantity:1,created_at:'2026-09-20T10:00:00Z',note:'Gift'},
+]
+const giftRows=giveawayRows(gifts)
+assert.equal(giveawayTotals(giftRows).grams,1250)
+assert.equal(giveawayTotals(giftRows).jars,3)
+assert.equal(giveawayRows(gifts,{search:'ravi'}).length,1)
+assert.equal(giveawayRows(gifts,{from:'2026-09-22'}).length,1)
+assert.equal(giveawayRows(gifts,{status:'Delivered'}).length,2)
+assert.equal(giveawayTotals([]).jars,0)
+assert.equal(giveawayTotals(giveawayRows([{...gifts[0],size_label:'unknown'}])).unknownWeight,true)
+assert.equal(salesTotals(salesRows(orders,payments)).grand_total,1170)
+console.log('Free giveaway quantity, filters and separate revenue checks passed.')

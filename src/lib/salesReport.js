@@ -34,3 +34,17 @@ export function salesTotals(rows) {
   return total
 }
 export const weightText = row => (row.grams / 1000).toLocaleString('en-IN', { maximumFractionDigits: 3 }) + ' kg' + (row.unknownWeight ? ' + unknown' : '')
+
+export function giveawayRows(giveaways, filters = {}) {
+ const query=(filters.search||'').trim().toLowerCase()
+ return giveaways.filter(g=>{
+  const day=indiaDate(g.created_at)
+  return (!filters.from||day>=filters.from)&&(!filters.to||day<=filters.to)&&
+   (!query||[g.recipient,g.product_name,g.size_label,g.note].some(v=>String(v||'').toLowerCase().includes(query)))
+ }).sort((a,b)=>b.created_at.localeCompare(a.created_at)||b.id.localeCompare(a.id)).map(g=>({
+  ...g,jars:Number(g.quantity),grams:(itemGrams(g)||0)*Number(g.quantity),unknownWeight:itemGrams(g)===null,
+ }))
+}
+export function giveawayTotals(rows) {
+ return rows.reduce((t,g)=>({jars:t.jars+g.jars,grams:t.grams+g.grams,unknownWeight:t.unknownWeight||g.unknownWeight}),{jars:0,grams:0,unknownWeight:false})
+}
