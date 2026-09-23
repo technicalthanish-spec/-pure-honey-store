@@ -22,15 +22,19 @@ export function salesRows(orders, payments, filters = {}) {
     return { ...order, ...balance(order, payments), grams, unknownWeight,
       jars: items.reduce((total, item) => total + Number(item.quantity), 0),
       itemsText: items.map(item => item.product_name + ' ' + item.size_label + ' × ' + item.quantity).join(', '),
+      costTotal: rupees(items.reduce((s,i)=>s+cents(i.unit_cost)*Number(i.quantity),0)),
+      missingCost: !items.length || items.some(i=>i.unit_cost==null || Number(i.unit_cost)===0),
+      rateText: items.map(i=>i.size_label+' × '+i.quantity+' @ '+Number(i.rate||0).toFixed(2)).join('; '),
+      costText: items.map(i=>i.size_label+' × '+i.quantity+' @ '+Number(i.unit_cost||0).toFixed(2)).join('; '),
       netSales: rupees(cents(order.subtotal) - cents(order.discount_amount)),
     }
   })
 }
 export function salesTotals(rows) {
-  const total = { orders: rows.length, jars: 0, grams: 0, unknownWeight: false }
-  for (const key of ['subtotal', 'discount_amount', 'delivery_charge', 'grand_total', 'received', 'refunded', 'net', 'pending', 'netSales'])
+  const total = { orders: rows.length, jars: 0, grams: 0, unknownWeight: false, missingCost: false }
+  for (const key of ['subtotal', 'discount_amount', 'delivery_charge', 'grand_total', 'received', 'refunded', 'net', 'pending', 'netSales', 'costTotal'])
     total[key] = rupees(rows.reduce((value, row) => value + cents(row[key]), 0))
-  for (const row of rows) { total.jars += row.jars; total.grams += row.grams; total.unknownWeight ||= row.unknownWeight }
+  for (const row of rows) { total.jars += row.jars; total.grams += row.grams; total.unknownWeight ||= row.unknownWeight; total.missingCost ||= row.missingCost }
   return total
 }
 export const weightText = row => (row.grams / 1000).toLocaleString('en-IN', { maximumFractionDigits: 3 }) + ' kg' + (row.unknownWeight ? ' + unknown' : '')
@@ -42,9 +46,16 @@ export function giveawayRows(giveaways, filters = {}) {
   return (!filters.from||day>=filters.from)&&(!filters.to||day<=filters.to)&&
    (!query||[g.recipient,g.product_name,g.size_label,g.note].some(v=>String(v||'').toLowerCase().includes(query)))
  }).sort((a,b)=>b.created_at.localeCompare(a.created_at)||b.id.localeCompare(a.id)).map(g=>({
-  ...g,jars:Number(g.quantity),grams:(itemGrams(g)||0)*Number(g.quantity),unknownWeight:itemGrams(g)===null,
+  ...g,costTotal:rupees(cents(g.unit_cost)*Number(g.quantity)),missingCost:g.unit_cost==null||Number(g.unit_cost)===0,jars:Number(g.quantity),grams:(itemGrams(g)||0)*Number(g.quantity),unknownWeight:itemGrams(g)===null,
  }))
 }
 export function giveawayTotals(rows) {
- return rows.reduce((t,g)=>({jars:t.jars+g.jars,grams:t.grams+g.grams,unknownWeight:t.unknownWeight||g.unknownWeight}),{jars:0,grams:0,unknownWeight:false})
+ return rows.reduce((t,g)=>({jars:t.jars+g.jars,grams:t.grams+g.grams,unknownWeight:t.unknownWeight||g.unknownWeight,costTotal:rupees(cents(t.costTotal)+cents(g.costTotal)),missingCost:t.missingCost||g.missingCost}),{jars:0,grams:0,unknownWeight:false,costTotal:0,missingCost:false})
+}
+
+
+export function reportSummary(total,freeTotal){
+ const profit=rupees(cents(total.grand_total)-cents(total.costTotal)-cents(freeTotal.costTotal))
+ const receivedLessCost=rupees(cents(total.net)-cents(total.costTotal)-cents(freeTotal.costTotal))
+ return {profit,receivedLessCost,sales:[['Honey sale amount',total.subtotal],['Discount given',-total.discount_amount],['Delivery charged',total.delivery_charge],['Net billed sales',total.grand_total],['Cost of sold honey',total.costTotal],['Payments received',total.received],['Refunds',-total.refunded],['Net received',total.net],['Payment pending',total.pending]],final:[['Net billed sales',total.grand_total],['Less: sold honey cost',-total.costTotal],['Less: free honey cost',-freeTotal.costTotal],['Profit after honey costs (before operating expenses)',profit],['Net received less sold + free honey cost (before expenses)',receivedLessCost]]}
 }

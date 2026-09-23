@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
 import { currency } from '../lib/format.js'
 import { exportCsv } from '../lib/business.js'
-import { indiaDate, salesRows, salesTotals, weightText, giveawayRows, giveawayTotals } from '../lib/salesReport.js'
+import { indiaDate, salesRows, salesTotals, weightText, giveawayRows, giveawayTotals, reportSummary } from '../lib/salesReport.js'
 import Loader from '../components/Loader.jsx'
 
 async function readAll(table, columns) {
@@ -27,9 +27,9 @@ export default function SalesReportPage() {
     setLoading(true); setError('')
     try {
       const [orders, payments, giveaways] = await Promise.all([
-        readAll('orders', 'id,order_number,customer_name,mobile,status,created_at,subtotal,discount_amount,coupon_code,delivery_charge,grand_total,order_items(product_name,size_label,quantity),invoices(id,invoice_number)'),
+        readAll('orders', 'id,order_number,customer_name,mobile,status,created_at,subtotal,discount_amount,coupon_code,delivery_charge,grand_total,order_items(product_name,size_label,quantity,rate,unit_cost),invoices(id,invoice_number)'),
         readAll('payments', 'id,order_id,kind,amount'),
-        readAll('stock_giveaways', 'id,recipient,product_name,size_label,quantity,note,created_at'),
+        readAll('stock_giveaways', 'id,recipient,product_name,size_label,quantity,unit_cost,note,created_at'),
       ])
       orders.sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id))
       setData({ orders, payments, giveaways, loadedAt: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) })
@@ -43,6 +43,7 @@ export default function SalesReportPage() {
   const total = useMemo(() => salesTotals(rows), [rows])
   const freeRows = useMemo(() => data && !invalidDates ? giveawayRows(data.giveaways, filters) : [], [data, filters, invalidDates])
   const freeTotal = useMemo(() => giveawayTotals(freeRows), [freeRows])
+  const summary=reportSummary(total,freeTotal)
   const combined = { grams: total.grams + freeTotal.grams, unknownWeight: total.unknownWeight || freeTotal.unknownWeight }
   const update = (key, value) => { setFilters(previous => ({ ...previous, [key]: value })); setPage(0) }
   const description = [
@@ -60,18 +61,19 @@ export default function SalesReportPage() {
   }
   const csv = () => {
     const records = rows.map(row => ({
-      type: 'SALE', note: '',
+      type: 'SALE', note: '', selling_rates:row.rateText,cost_rates:row.costText,honey_cost:row.costTotal,
       date_ist: indiaDate(row.created_at), order: row.order_number, customer: row.customer_name, status: row.status,
       honey: row.itemsText, jars: row.jars, weight: weightText(row), amount: row.subtotal, discount: row.discount_amount || 0,
       coupon: row.coupon_code || '', delivery: row.delivery_charge, total: row.grand_total,
       received: row.received, refunded: row.refunded, net_received: row.net, pending: row.pending,
     }))
-    records.push({ type: 'SALES TOTAL', note: '', date_ist: '', order: 'TOTAL', customer: total.orders + ' orders', status: '', honey: '', jars: total.jars,
+    records.push({ type: 'SALES TOTAL', note: '',selling_rates:'',cost_rates:'',honey_cost:total.costTotal, date_ist: '', order: 'TOTAL', customer: total.orders + ' orders', status: '', honey: '', jars: total.jars,
       weight: weightText(total), amount: total.subtotal, discount: total.discount_amount, coupon: '', delivery: total.delivery_charge,
       total: total.grand_total, received: total.received, refunded: total.refunded, net_received: total.net, pending: total.pending })
-    freeRows.forEach(g => records.push({type:'FREE',note:g.note||'',date_ist:indiaDate(g.created_at),order:'',customer:g.recipient,status:'FREE',honey:g.product_name+' '+g.size_label,jars:g.jars,weight:weightText(g),amount:0,discount:0,coupon:'',delivery:0,total:0,received:0,refunded:0,net_received:0,pending:0}))
-    records.push({type:'FREE TOTAL',note:'',date_ist:'',order:'',customer:'',status:'FREE',honey:'',jars:freeTotal.jars,weight:weightText(freeTotal),amount:0,discount:0,coupon:'',delivery:0,total:0,received:0,refunded:0,net_received:0,pending:0})
+    freeRows.forEach(g => records.push({type:'FREE',note:g.note||'',selling_rates:'FREE',cost_rates:g.unit_cost,honey_cost:g.costTotal,date_ist:indiaDate(g.created_at),order:'',customer:g.recipient,status:'FREE',honey:g.product_name+' '+g.size_label,jars:g.jars,weight:weightText(g),amount:0,discount:0,coupon:'',delivery:0,total:0,received:0,refunded:0,net_received:0,pending:0}))
+    records.push({type:'FREE TOTAL',note:'',selling_rates:'',cost_rates:'',honey_cost:freeTotal.costTotal,date_ist:'',order:'',customer:'',status:'FREE',honey:'',jars:freeTotal.jars,weight:weightText(freeTotal),amount:0,discount:0,coupon:'',delivery:0,total:0,received:0,refunded:0,net_received:0,pending:0})
     records.push({type:'COMBINED QUANTITY',note:'Sales plus free giveaways; not an additional financial total',date_ist:'',order:'',customer:'',status:'',honey:'',jars:total.jars+freeTotal.jars,weight:weightText(combined),amount:'',discount:'',coupon:'',delivery:'',total:'',received:'',refunded:'',net_received:'',pending:''})
+    summary.final.forEach(([label,value])=>records.push({type:'FINAL SUMMARY',note:label,total:value}))
     exportCsv('honey-sales-report', records)
   }
   return <div className="admin-page sales-report">
@@ -97,31 +99,33 @@ export default function SalesReportPage() {
         <p className="muted-text">Total = amount − discount + delivery. Exports include every filtered row. Open the PDF to print.</p>
         {total.unknownWeight && <p className="alert warning">Some older item sizes are unrecognised; their weight is marked unknown rather than counted as zero.</p>}
         <div className="table-wrap"><table className="sales-table">
-          <thead><tr><th>Date / Order</th><th>Customer</th><th>Honey / Quantity</th><th>Weight</th><th>Amount</th><th>Discount</th><th>Delivery</th><th>Total</th><th>Net received</th><th>Pending</th><th>Invoice</th></tr></thead>
+          <thead><tr><th>Date / Order</th><th>Customer</th><th>Honey / Quantity</th><th>Weight</th><th>Selling rate / jar</th><th>Cost rate / jar</th><th>Sold honey cost</th><th>Amount</th><th>Discount</th><th>Delivery</th><th>Total</th><th>Net received</th><th>Pending</th><th>Invoice</th></tr></thead>
           <tbody>{rows.slice(page * 50, (page + 1) * 50).map(row => {
             const invoice = Array.isArray(row.invoices) ? row.invoices[0] : row.invoices
             return <tr key={row.id}>
               <td>{indiaDate(row.created_at)}<br/><Link to={'/admin/orders/' + row.id}>{row.order_number}</Link><small>{row.status}</small></td>
               <td>{row.customer_name}</td><td>{row.itemsText || 'No item details'}<small>{row.jars} jars</small></td><td>{weightText(row)}</td>
-              <td>{currency(row.subtotal)}</td><td>{currency(row.discount_amount || 0)}{row.coupon_code && <small>{row.coupon_code}</small>}</td>
+              <td>{row.rateText}</td><td>{row.costText}</td><td>{currency(row.costTotal)}</td><td>{currency(row.subtotal)}</td><td>{currency(row.discount_amount || 0)}{row.coupon_code && <small>{row.coupon_code}</small>}</td>
               <td>{currency(row.delivery_charge)}</td><td><strong>{currency(row.grand_total)}</strong></td><td>{currency(row.net)}</td><td>{currency(row.pending)}</td>
               <td><Link to={invoice ? '/admin/invoices/' + invoice.id : '/admin/orders/' + row.id}>{invoice ? invoice.invoice_number : 'Open order'}</Link></td>
             </tr>
-          })}{!rows.length && <tr><td colSpan="11" className="empty-cell">No matching sales records.</td></tr>}</tbody>
-          <tfoot><tr><th colSpan="2">TOTAL · {total.orders} orders</th><th>{total.jars} jars</th><th>{weightText(total)}</th><th>{currency(total.subtotal)}</th><th>{currency(total.discount_amount)}</th><th>{currency(total.delivery_charge)}</th><th>{currency(total.grand_total)}</th><th>{currency(total.net)}</th><th>{currency(total.pending)}</th><th /></tr></tfoot>
+          })}{!rows.length && <tr><td colSpan="14" className="empty-cell">No matching sales records.</td></tr>}</tbody>
+          <tfoot><tr><th colSpan="2">TOTAL · {total.orders} orders</th><th>{total.jars} jars</th><th>{weightText(total)}</th><th>—</th><th>—</th><th>{currency(total.costTotal)}</th><th>{currency(total.subtotal)}</th><th>{currency(total.discount_amount)}</th><th>{currency(total.delivery_charge)}</th><th>{currency(total.grand_total)}</th><th>{currency(total.net)}</th><th>{currency(total.pending)}</th><th /></tr></tfoot>
         </table></div>
         {rows.length > 50 && <div className="report-actions"><button className="secondary-btn" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous</button><span>Page {page + 1} of {Math.ceil(rows.length / 50)}</span><button className="secondary-btn" disabled={(page + 1) * 50 >= rows.length} onClick={() => setPage(page + 1)}>Next</button></div>}
       </section>
+      <section className="admin-card"><h2>Sales summary</h2><div className="detail-list">{summary.sales.map(([label,value])=><div key={label}><span>{label}</span><strong>{currency(value)}</strong></div>)}</div></section>
       <section className="admin-card">
         <div className="card-title-row"><div><h2>Free honey / Giveaways</h2><p>{freeTotal.jars} jars · {weightText(freeTotal)} · Customer charge ₹0</p></div><Link className="secondary-btn" to="/admin/giveaways">Record free honey</Link></div>
         <p className="muted-text">Included in PDF and CSV. Dates and recipient search apply here; the order status filter does not hide giveaways.</p>
         {freeTotal.unknownWeight && <p className="alert warning">Some giveaway sizes are unrecognised; their weight is marked unknown.</p>}
-        <div className="table-wrap"><table><thead><tr><th>Date</th><th>Given to</th><th>Honey / Size</th><th>Jars</th><th>Weight</th><th>Amount</th><th>Note</th></tr></thead>
-          <tbody>{freeRows.map(g => <tr key={g.id}><td>{indiaDate(g.created_at)}</td><td>{g.recipient}</td><td>{g.product_name} · {g.size_label}</td><td>{g.jars}</td><td>{weightText(g)}</td><td><strong>FREE · ₹0</strong></td><td>{g.note || '—'}</td></tr>)}
-          {!freeRows.length && <tr><td colSpan="7" className="empty-cell">No free honey recorded for these filters.</td></tr>}</tbody>
-          <tfoot><tr><th colSpan="3">FREE TOTAL</th><th>{freeTotal.jars}</th><th>{weightText(freeTotal)}</th><th>₹0</th><th /></tr></tfoot>
+        <div className="table-wrap"><table><thead><tr><th>Date</th><th>Given to</th><th>Honey / Size</th><th>Jars</th><th>Weight</th><th>Cost / jar</th><th>Total cost / loss</th><th>Amount</th><th>Note</th></tr></thead>
+          <tbody>{freeRows.map(g => <tr key={g.id}><td>{indiaDate(g.created_at)}</td><td>{g.recipient}</td><td>{g.product_name} · {g.size_label}</td><td>{g.jars}</td><td>{weightText(g)}</td><td>{currency(g.unit_cost)}</td><td>{currency(g.costTotal)}</td><td><strong>FREE · ₹0</strong></td><td>{g.note || '—'}</td></tr>)}
+          {!freeRows.length && <tr><td colSpan="9" className="empty-cell">No free honey recorded for these filters.</td></tr>}</tbody>
+          <tfoot><tr><th colSpan="3">FREE TOTAL</th><th>{freeTotal.jars}</th><th>{weightText(freeTotal)}</th><th>—</th><th>{currency(freeTotal.costTotal)}</th><th>₹0</th><th /></tr></tfoot>
         </table></div>
       </section>
+      <section className="admin-card"><h2>Final summary · sales minus honey costs</h2><div className="detail-list">{summary.final.map(([label,value])=><div key={label}><span>{label}</span><strong>{currency(value)}</strong></div>)}</div><p className="muted-text">Net received is payments minus refunds. Profit uses the billed sales amount, so pending payments are included. Operating expenses are excluded here; see the dashboard for complete net profit. All figures follow the selected filters.</p>{(total.missingCost||freeTotal.missingCost)&&<p className="alert warning">Some costs are zero or missing. Correct them before relying on profit totals.</p>}</section>
     </>}
   </div>
 }
