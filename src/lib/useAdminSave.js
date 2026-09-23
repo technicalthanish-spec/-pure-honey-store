@@ -12,7 +12,7 @@ export function useAdminSave(operation,rpcName='admin_save_record'){
   try{
    const attempt=pending||{id:crypto.randomUUID(),payload}
    sessionStorage.setItem(key,JSON.stringify(attempt));setPending(attempt)
-   const {data,error}=await supabase.rpc(rpcName,rpcName==='admin_correct_record'?{...attempt.payload,p_request_id:attempt.id}:{p_request_id:attempt.id,p_operation:operation,p_data:attempt.payload})
+   const {data,error}=await supabase.rpc(rpcName,rpcName!=='admin_save_record'?{...attempt.payload,p_request_id:attempt.id}:{p_request_id:attempt.id,p_operation:operation,p_data:attempt.payload})
    if(error){
     // A server SQL error rolls the entire transaction back; a network error is uncertain.
     if(error.code&&/^[0-9A-Z]{5}$/.test(error.code)){sessionStorage.removeItem(key);setPending(null)}

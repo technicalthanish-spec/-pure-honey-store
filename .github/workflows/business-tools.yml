@@ -45,3 +45,5 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f tests/admin-tools.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260923171311_editable_records_profit.sql
           psql -v ON_ERROR_STOP=1 -f tests/corrections.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260923172725_historical_sale_cost.sql
+          psql -v ON_ERROR_STOP=1 -f tests/historical-cost.sql

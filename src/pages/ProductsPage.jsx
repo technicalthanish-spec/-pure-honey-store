@@ -1,3 +1,4 @@
+import HistoricalCost from '../components/HistoricalCost.jsx'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase.js'
@@ -59,6 +60,7 @@ export default function ProductsPage() {
             <label className="field"><span>Available quantity</span><input type="number" min="0" step="1" value={product.available_quantity} onChange={(e) => patchLocal(product.id, 'available_quantity', e.target.value)} /></label>
             <label className="toggle-row"><input type="checkbox" checked={product.active} onChange={(e) => patchLocal(product.id, 'active', e.target.checked)} /><span>Active for ordering</span></label>
             <div className="product-card-footer"><span>Margin: {currency(Number(product.price)-Number(product.cost_price||0))} / jar</span><button className="primary-btn small" onClick={() => save(product)} disabled={Boolean(saving)}>{saving === product.id ? 'Saving...' : 'Save'}</button></div>
+            <HistoricalCost product={product}/>
           </section>
         ))}
       </div>
